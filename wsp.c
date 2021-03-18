@@ -9,7 +9,7 @@
 #include <pthread.h>
 
 // TODO: You may find this helpful.
-//#include <omp.h>
+#include <omp.h>
 
 /*
 ________________________________________________
@@ -62,7 +62,7 @@ ________________________________________________
 
 typedef int8_t city_t;
 
-int NCORES = -1;  // TODO: this isn't being used anywhere.
+int NCORES = -1;  // TODO: this isn't being used anywhere, this needs to be used somewhere.
 int NCITIES = -1; // number of cities in the file.
 int *DIST = NULL; // one dimensional array used as a matrix of size (NCITIES * NCITIES).
 
@@ -73,8 +73,8 @@ typedef struct path_struct_t {
 } path_t;
 path_t *bestPath = NULL;
 
-
 // set DIST[i,j] to value
+// what's cache line size?
 inline static void set_dist(int i, int j, int value) {
   assert(value > 0);
   int offset = i * NCITIES + j;
@@ -102,15 +102,66 @@ void wsp_print_result() {
   return;
 }
 
+static inline void swap(city_t *ptr1, city_t *ptr2) {
+    city_t temp = *ptr1;
+    *ptr1 = *ptr2;
+    *ptr2 = temp;
+    return;
+}
 
+city_t *scratch;
+// how can we make a threadlocal copy of scratch?
+// without making it seem like a dick move
+void wsp_print_scratch() {
+  printf("Path: ");
+  for(int i = 0; i < NCITIES; i++) {
+    if(i == NCITIES-1) printf("%d", scratch[i]);
+    else printf("%d -> ", scratch[i]);
+  }
+  putchar('\n');
+  return;
+}
+
+// best path is initialized to idxs
+// let's avoid using heuristics.
+int wsp_recursion(int idx, int sum_dist) {
+  if (idx == NCITIES) {
+    wsp_print_scratch();
+    return sum_dist;
+  }
+  int min_dist = INT32_MAX;
+  for (int i = idx; i < NCITIES; ++i) {
+    swap(scratch + idx, scratch + i);
+    int rem_dist;
+    if (idx > 0) {
+      city_t pIdx1 = scratch[idx - 1];
+      city_t pIdx2 = scratch[idx];
+      rem_dist = wsp_recursion(idx + 1, sum_dist + get_dist(pIdx1, pIdx2));
+    }
+    else {
+      rem_dist = wsp_recursion(idx + 1, sum_dist);
+    }
+    if (rem_dist < min_dist) {
+      min_dist = rem_dist;
+      if (idx == 0) {
+	memcpy(bestPath->path, scratch, NCITIES * sizeof(city_t));
+      }
+    }
+    swap(scratch + idx, scratch + i);
+  }
+  return min_dist;
+}
+
+// We can have the other threads just wait. Locking is costly`
 void wsp_start() {
-
-  // TODO: try finding a better path.
   int cityID = 0;
   for(cityID=0; cityID < NCITIES; cityID++) {
-    bestPath->path[cityID] = cityID;
-    if(cityID>0) bestPath->cost += get_dist(bestPath->path[cityID-1],bestPath->path[cityID]);
+    scratch[cityID] = cityID;
   }
+
+  printf("NCITIES: %d\n", NCITIES);
+  int min_cost = wsp_recursion(0, 0);
+  bestPath->cost = min_cost;
 
   return;
 }
@@ -144,6 +195,7 @@ int main(int argc, char **argv) {
   bestPath = (path_t*)malloc(sizeof(path_t));
   bestPath->cost = 0;
   bestPath->path = (city_t*)calloc(NCITIES, sizeof(city_t));
+  scratch = (city_t*)calloc(NCITIES, sizeof(city_t));
   struct timespec before, after;
   clock_gettime(CLOCK_REALTIME, &before);
   wsp_start();
