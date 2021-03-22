@@ -1,5 +1,5 @@
 
-CXXFLAGS += -Wall -Wextra -pthread -fopenmp -g -O3 -DNDEBUG
+CXXFLAGS += -Wall -Wextra -pthread -fopenmp -g3 -O3 -DNDEBUG
 
 .phony: all wsp release
 
