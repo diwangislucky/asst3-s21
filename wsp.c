@@ -54,6 +54,15 @@ your code to help make it more amendable
 to parallelism. Attempt small iterative
 changes while still ensuring the correctness
 of your code.
+
+we introduced static granularity limits.
+also we need to control granularity of dynamic heuristics 
+based on number of processors.
+
+Let us now introduce heuristics 
+
+TODO: In addition, we need to introduce heuiristics
+
 ________________________________________________
 */ 
 
@@ -122,17 +131,71 @@ void wsp_print_scratch(city_t *scratch) {
 }
 
 // granularity limit
-// int gran_limit;
+int gran_limit = 6;
 
-void wsp_recursion_par(int idx, int sum_dist, 
+static inline int wsp_heuristic(int idx, city_t *scratch) {
+  // what heuristic?
+  // how about two minimums
+  if (NCITIES == idx + 1) {
+    return 0;
+  }
+  if (NCITIES == idx + 2) {
+    city_t pIdx1 = scratch[idx];
+    city_t pIdx2 = scratch[idx + 1];
+    return get_dist(pIdx1, pIdx2);
+  }
+  int first_min = INT32_MAX, second_min = INT32_MAX;
+  for (; idx < NCITIES - 1; ++idx) {
+    city_t pIdx1 = scratch[idx];
+    city_t pIdx2 = scratch[idx + 1];
+    int current_dist = get_dist(pIdx1, pIdx2);
+    if (second_min > current_dist) {
+      if (first_min > current_dist) {
+        second_min = first_min;
+        first_min = current_dist;
+      }
+    }
+  }
+  assert(first_min != INT32_MAX && second_min != INT32_MAX);
+  return (first_min + second_min) / 2 * (NCITIES - idx - 1);
+}
+
+void wsp_recursion_seq(int idx, int sum_dist, city_t *scratch,
 		int *min_dist, city_t *best_path) {
-    ++idx;
+  // base case
+  // be careful about NCITIES, that might be a bit of a doozy w.r.t. 
+  //
+  // cache bouncing
+  if (sum_dist + wsp_heuristic(idx, scratch) > *min_dist) {
+    return;
+  }
+  if (idx == NCITIES) {
+    // wsp_print_scratch(scratch);
+    if (*min_dist > sum_dist) {
+      memcpy(best_path, scratch, NCITIES * sizeof(city_t));
+      *min_dist = sum_dist;
+    }
+    return;
+  }
+  for (int i = idx; i < NCITIES; ++i) {
+    // let's try making this properly
+    swap(scratch + idx, scratch + i);
+    if (idx > 0) {
+      city_t pIdx1 = scratch[idx - 1];
+      city_t pIdx2 = scratch[idx];
+      wsp_recursion_seq(idx + 1, sum_dist + get_dist(pIdx1, pIdx2), 
+		      scratch, min_dist, best_path);
+    }
+    else {
+      wsp_recursion_seq(idx + 1, sum_dist, scratch, min_dist, best_path);
+    }
+    swap(scratch + idx, scratch + i);
+  }
+  return;
 }
 
 // best path is initialized to idxs
 // let's avoid using heuristics.
-//
-// Let's avoid shitty exotics
 //
 // trying to make everything local now to ease parallelization
 // min_dist is the minimum distance.
@@ -143,7 +206,16 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
   // base case
   // be careful about NCITIES, that might be a bit of a doozy w.r.t. 
   //
-  // cache bouncing
+  // cache bouncing because NCORES is going to be passed around
+  // we also need heuristics here.
+  if (sum_dist + wsp_heuristic(idx, top_scratch) > *min_dist) {
+    return;
+  }
+  if (idx + 1 >= NCORES) {
+    wsp_recursion_seq(idx, sum_dist, top_scratch, min_dist, best_path);
+    return;
+  }
+  // does this work?
   if (idx == NCITIES) {
     // wsp_print_scratch(scratch);
     if (*min_dist > sum_dist) {
@@ -154,21 +226,25 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
   }
   city_t scratch[32];
   memcpy(&scratch, top_scratch, NCITIES * sizeof(city_t));
+  // don't know if this is worth it
+  // city_t new_best_path[32];
+  // int new_best_cost = INT32_MAX;
   // recursive case
   // we need an openmp parallel for and we also need independent memory
   // we need to make sure this works
-#pragma omp parallel for firstprivate(scratch) shared(min_dist) shared(best_path)
   for (int i = idx; i < NCITIES; ++i) {
     // let's try making this properly
     swap(scratch + idx, scratch + i);
     if (idx > 0) {
       city_t pIdx1 = scratch[idx - 1];
       city_t pIdx2 = scratch[idx];
+#pragma omp task firstprivate(scratch) shared(min_dist) shared(best_path)
       wsp_recursion(idx + 1, sum_dist + get_dist(pIdx1, pIdx2), 
 		      scratch, min_dist, best_path);
     }
     else {
-      wsp_recursion(idx + 1, sum_dist, scratch, 
+#pragma omp task firstprivate(scratch) shared(min_dist) shared(best_path)
+      wsp_recursion(idx + 1, sum_dist, scratch,  
 		      min_dist, best_path);
     }
     swap(scratch + idx, scratch + i);
@@ -188,7 +264,10 @@ void wsp_start() {
   }
 
   printf("NCITIES: %d\n", NCITIES);
+  omp_set_num_threads(NCORES);
+
   wsp_recursion(0, 0, scratch, &(bestPath->cost), bestPath->path);
+  #pragma omp taskwait
 
   return;
 }
