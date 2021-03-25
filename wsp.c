@@ -144,7 +144,7 @@ static inline int wsp_heuristic(int idx, city_t *scratch) {
     city_t pIdx2 = scratch[idx + 1];
     return get_dist(pIdx1, pIdx2);
   }
-  int first_min = INT32_MAX, second_min = INT32_MAX;
+  int first_min = INT_MAX, second_min = INT_MAX;
   for (; idx < NCITIES - 1; ++idx) {
     city_t pIdx1 = scratch[idx];
     city_t pIdx2 = scratch[idx + 1];
@@ -156,7 +156,7 @@ static inline int wsp_heuristic(int idx, city_t *scratch) {
       }
     }
   }
-  assert(first_min != INT32_MAX && second_min != INT32_MAX);
+  assert(first_min != INT_MAX && second_min != INT_MAX);
   return (first_min + second_min) / 2 * (NCITIES - idx - 1);
 }
 
@@ -228,7 +228,7 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
   memcpy(&scratch, top_scratch, NCITIES * sizeof(city_t));
   // don't know if this is worth it
   // city_t new_best_path[32];
-  // int new_best_cost = INT32_MAX;
+  // int new_best_cost = INT_MAX;
   // recursive case
   // we need an openmp parallel for and we also need independent memory
   // we need to make sure this works
@@ -299,7 +299,7 @@ int main(int argc, char **argv) {
   }
   fclose(fp);
   bestPath = (path_t*)malloc(sizeof(path_t));
-  bestPath->cost = INT32_MAX;
+  bestPath->cost = INT_MAX;
   bestPath->path = (city_t*)calloc(NCITIES, sizeof(city_t));
   struct timespec before, after;
   clock_gettime(CLOCK_REALTIME, &before);
