@@ -171,9 +171,12 @@ void wsp_recursion_seq(int idx, int sum_dist, city_t *scratch,
   }
   if (idx == NCITIES) {
     // wsp_print_scratch(scratch);
+    #pragma omp critical 
+    {
     if (*min_dist > sum_dist) {
       memcpy(best_path, scratch, NCITIES * sizeof(city_t));
       *min_dist = sum_dist;
+    }
     }
     return;
   }
@@ -211,6 +214,7 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
   if (sum_dist + wsp_heuristic(idx, top_scratch) > *min_dist) {
     return;
   }
+  // this is wrong
   if (idx + 1 >= NCORES) {
     wsp_recursion_seq(idx, sum_dist, top_scratch, min_dist, best_path);
     return;
@@ -218,9 +222,12 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
   // does this work?
   if (idx == NCITIES) {
     // wsp_print_scratch(scratch);
+    #pragma omp critical 
+    {
     if (*min_dist > sum_dist) {
       memcpy(best_path, top_scratch, NCITIES * sizeof(city_t));
       *min_dist = sum_dist;
+    }
     }
     return;
   }
@@ -236,16 +243,22 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
     // let's try making this properly
     swap(scratch + idx, scratch + i);
     if (idx > 0) {
+#pragma omp task firstprivate(scratch, idx, sum_dist)\
+      shared(min_dist, best_path)
+      {
       city_t pIdx1 = scratch[idx - 1];
       city_t pIdx2 = scratch[idx];
-#pragma omp task firstprivate(scratch) shared(min_dist) shared(best_path)
       wsp_recursion(idx + 1, sum_dist + get_dist(pIdx1, pIdx2), 
-		      scratch, min_dist, best_path);
+		    scratch, min_dist, best_path);
+      }
     }
     else {
-#pragma omp task firstprivate(scratch) shared(min_dist) shared(best_path)
+#pragma omp task firstprivate(scratch, idx, sum_dist)\
+      shared(min_dist, best_path)
+      {
       wsp_recursion(idx + 1, sum_dist, scratch,  
 		      min_dist, best_path);
+      }
     }
     swap(scratch + idx, scratch + i);
   }
@@ -258,22 +271,34 @@ void wsp_start() {
   // bestPath->cost = 0;
   // bestPath->path = (city_t*)calloc(NCITIES, sizeof(city_t));
   assert(NCORES > 0);
-  city_t *scratch = (city_t*)calloc(NCITIES, sizeof(city_t));
+  city_t scratch[32];
   for(cityID=0; cityID < NCITIES; cityID++) {
     scratch[cityID] = cityID;
   }
 
   printf("NCITIES: %d\n", NCITIES);
   omp_set_num_threads(NCORES);
+  if (NCORES == 1) {
+    wsp_recursion_seq(0, 0, scratch, &(bestPath->cost), bestPath->path);
+    return;
+  }
 
+#pragma omp parallel
+  {
+#pragma omp single nowait
+  {
   wsp_recursion(0, 0, scratch, &(bestPath->cost), bestPath->path);
-  #pragma omp taskwait
+  }
+  }
+#pragma omp taskwait
 
   return;
 }
 
 int main(int argc, char **argv) {
-  if(argc < 4 || strcmp(argv[1], "-p") != 0) error_exit("Expecting two arguments: -p [processor count] and [file name]\n");
+  if (argc < 4 || strcmp(argv[1], "-p") != 0)\
+      error_exit("Expecting two arguments: -p [processor count]"
+              " and [file name]\n");
   NCORES = atoi(argv[2]);
   if(NCORES < 1) error_exit("Illegal core count: %d\n", NCORES);
   char *filename = argv[3];
@@ -305,7 +330,8 @@ int main(int argc, char **argv) {
   clock_gettime(CLOCK_REALTIME, &before);
   wsp_start();
   clock_gettime(CLOCK_REALTIME, &after);
-  double delta_ms = (double)(after.tv_sec - before.tv_sec) * 1000.0 + (after.tv_nsec - before.tv_nsec) / 1000000.0;
+  double delta_ms = (double)(after.tv_sec - before.tv_sec) * 1000.0
+      + (after.tv_nsec - before.tv_nsec) / 1000000.0;
   putchar('\n');
   printf("============ Time ============\n");
   printf("Time: %.3f ms (%.3f s)\n", delta_ms, delta_ms / 1000.0);

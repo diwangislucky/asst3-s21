@@ -24,20 +24,33 @@ int fib(int n)
     return fib_ser(n);
   else
   {
+// #pragma omp single nowait
+  {
     #pragma omp task shared(i)
     i = fib(n-1);
+  }
+// #pragma omp single nowait
+  {
     #pragma omp task shared(j)
     j = fib(n-2);
+  }
     #pragma omp taskwait
     return i+j;
   }
 }
 
 int main() {
-  omp_set_num_threads(1);
+  omp_set_num_threads(4);
   struct timespec before, after;
   clock_gettime(CLOCK_REALTIME, &before);
-  int fib_res = fib(30);
+  int fib_res;
+#pragma omp parallel 
+  {
+#pragma omp single nowait
+  {
+  fib_res = fib(31);
+  }
+  }
   clock_gettime(CLOCK_REALTIME, &after);
   double delta_ms = (double)(after.tv_sec - before.tv_sec) * 1000.0 + (after.tv_nsec - before.tv_nsec) / 1000000.0;
   putchar('\n');
