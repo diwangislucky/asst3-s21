@@ -60,9 +60,9 @@ also we need to control granularity of dynamic heuristics
 based on number of processors.
 
 Let us now introduce heuristics 
+A simple heuristic.
 
-TODO: In addition, we need to introduce heuiristics
-
+let us now introduce another thing: not a simple heuristic
 ________________________________________________
 */ 
 
@@ -243,7 +243,7 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
     // let's try making this properly
     swap(scratch + idx, scratch + i);
     if (idx > 0) {
-#pragma omp task firstprivate(scratch, idx, sum_dist)\
+#pragma omp task firstprivate(scratch, sum_dist)\
       shared(min_dist, best_path)
       {
       city_t pIdx1 = scratch[idx - 1];
@@ -262,6 +262,7 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
     }
     swap(scratch + idx, scratch + i);
   }
+#pragma omp taskwait
   return;
 }
 
@@ -290,7 +291,7 @@ void wsp_start() {
   wsp_recursion(0, 0, scratch, &(bestPath->cost), bestPath->path);
   }
   }
-#pragma omp taskwait
+// #pragma omp taskwait
 
   return;
 }
