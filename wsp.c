@@ -197,6 +197,8 @@ void wsp_recursion_seq(int idx, int sum_dist, city_t *scratch,
   return;
 }
 
+#define GRAN_LIMIT 8
+
 // best path is initialized to idxs
 // let's avoid using heuristics.
 //
@@ -210,12 +212,12 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
   // be careful about NCITIES, that might be a bit of a doozy w.r.t. 
   //
   // cache bouncing because NCORES is going to be passed around
-  // we also need heuristics here.
+  // we also need heristics here.
   if (sum_dist + wsp_heuristic(idx, top_scratch) > *min_dist) {
     return;
   }
   // this is wrong
-  if (idx + 1 >= NCORES) {
+  if (NCITIES - idx < GRAN_LIMIT) {
     wsp_recursion_seq(idx, sum_dist, top_scratch, min_dist, best_path);
     return;
   }
