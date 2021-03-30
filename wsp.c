@@ -197,6 +197,7 @@ void wsp_recursion_seq(int idx, int sum_dist, city_t *scratch,
   return;
 }
 
+// why is 8 optimal
 #define GRAN_LIMIT 8
 
 // best path is initialized to idxs
@@ -234,7 +235,7 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
     return;
   }
   city_t scratch[32];
-  memcpy(&scratch, top_scratch, NCITIES * sizeof(city_t));
+  memcpy(&scratch + idx, top_scratch, (NCITIES - idx) * sizeof(city_t));
   // don't know if this is worth it
   // city_t new_best_path[32];
   // int new_best_cost = INT_MAX;
@@ -243,26 +244,23 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
   // we need to make sure this works
   for (int i = idx; i < NCITIES; ++i) {
     // let's try making this properly
+#pragma omp task firstprivate(sum_dist) private(scratch)\
+      shared(min_dist, best_path)
+    {
+    memcpy(&scratch, top_scratch, (NCITIES) * sizeof(city_t));
     swap(scratch + idx, scratch + i);
     if (idx > 0) {
-#pragma omp task firstprivate(scratch, sum_dist)\
-      shared(min_dist, best_path)
-      {
       city_t pIdx1 = scratch[idx - 1];
       city_t pIdx2 = scratch[idx];
       wsp_recursion(idx + 1, sum_dist + get_dist(pIdx1, pIdx2), 
 		    scratch, min_dist, best_path);
-      }
     }
     else {
-#pragma omp task firstprivate(scratch, idx, sum_dist)\
-      shared(min_dist, best_path)
-      {
       wsp_recursion(idx + 1, sum_dist, scratch,  
 		      min_dist, best_path);
-      }
     }
-    swap(scratch + idx, scratch + i);
+    // swap(scratch + idx, scratch + i);
+    }
   }
 #pragma omp taskwait
   return;
@@ -279,7 +277,7 @@ void wsp_start() {
     scratch[cityID] = cityID;
   }
 
-  printf("NCITIES: %d\n", NCITIES);
+  // printf("NCITIES: %d\n", NCITIES);
   omp_set_num_threads(NCORES);
   if (NCORES == 1) {
     wsp_recursion_seq(0, 0, scratch, &(bestPath->cost), bestPath->path);
@@ -288,10 +286,20 @@ void wsp_start() {
 
 #pragma omp parallel
   {
+  double start, end;
+  start = omp_get_wtime();
+
 #pragma omp single nowait
+#pragma omp task firstprivate(scratch)
   {
   wsp_recursion(0, 0, scratch, &(bestPath->cost), bestPath->path);
   }
+#pragma omp taskwait
+  end = omp_get_wtime();
+
+  double delta_s = end - start;
+  printf("thread num: %d, time: %.3f ms (%.3f s)\n", 
+          omp_get_thread_num(), delta_s * 1000.0, delta_s);
   }
 // #pragma omp taskwait
 
