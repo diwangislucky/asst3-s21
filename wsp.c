@@ -235,7 +235,7 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
     return;
   }
   city_t scratch[32];
-  memcpy(&scratch + idx, top_scratch, (NCITIES - idx) * sizeof(city_t));
+  // memcpy(&scratch + idx, top_scratch, (NCITIES - idx) * sizeof(city_t));
   // don't know if this is worth it
   // city_t new_best_path[32];
   // int new_best_cost = INT_MAX;
