@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -198,7 +197,7 @@ void wsp_recursion_seq(int idx, int sum_dist, city_t *scratch,
 }
 
 // why is 8 optimal
-#define GRAN_LIMIT 8
+#define GRAN_LIMIT 2
 
 // best path is initialized to idxs
 // let's avoid using heuristics.
@@ -218,7 +217,7 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
     return;
   }
   // this is wrong
-  if (NCITIES - idx < GRAN_LIMIT) {
+  if (idx < GRAN_LIMIT) {
     wsp_recursion_seq(idx, sum_dist, top_scratch, min_dist, best_path);
     return;
   }
@@ -349,3 +348,4 @@ int main(int argc, char **argv) {
   wsp_print_result();
   return 0;
 }
+
