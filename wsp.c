@@ -217,7 +217,7 @@ void wsp_recursion(int idx, int sum_dist, city_t *top_scratch,
     return;
   }
   // this is wrong
-  if (idx < GRAN_LIMIT) {
+  if (idx >= GRAN_LIMIT) {
     wsp_recursion_seq(idx, sum_dist, top_scratch, min_dist, best_path);
     return;
   }
